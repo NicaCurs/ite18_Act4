@@ -1,181 +1,189 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/loaders/GLTFLoader.js';
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js";
+import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js";
 
-// Scene Setup
+// === Basic Scene Setup ===
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xcce7ff);
-scene.fog = new THREE.Fog(0xcce7ff, 10, 50);
-
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(20, 10, 30);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
-// OrbitControls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.25;
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 5, 30);
+scene.add(camera);
 
-// Snowy Ground
-const snow = new THREE.Mesh(
-  new THREE.PlaneGeometry(60, 60),
-  new THREE.MeshStandardMaterial({ color: 0xffffff })
-);
-snow.rotation.x = -Math.PI / 2;
-scene.add(snow);
+// === Orbit Controls ===
+new OrbitControls(camera, renderer.domElement);
 
-// Lights
-const ambientLight = new THREE.AmbientLight(0x99ccff, 0.5);
+// === Lighting ===
+const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
 scene.add(ambientLight);
 
-const spotlight = new THREE.SpotLight(0xffffff, 1);
-spotlight.position.set(0, 30, 0);
-spotlight.angle = Math.PI / 6;
-spotlight.penumbra = 0.3;
-spotlight.castShadow = true;
-scene.add(spotlight);
+const movingLight = new THREE.PointLight(0x8a2be2, 2, 50);
+movingLight.position.set(10, 10, 10);
+scene.add(movingLight);
 
-// Load Yeti Model with Animations
-const loader = new GLTFLoader();
-let mixer;
-loader.load(
+// === Crystals ===
+const crystalMaterial = new THREE.MeshPhongMaterial({
+    color: 0x7fffd4,
+    emissive: 0x7fffd4,
+    emissiveIntensity: 0.6,
+    transparent: true,
+    opacity: 0.9,
+    shininess: 100,
+});
+
+function createCrystal(position) {
+    const geometry = new THREE.ConeGeometry(1, 3, 8);
+    const crystal = new THREE.Mesh(geometry, crystalMaterial);
+    crystal.position.set(...position);
+    scene.add(crystal);
+}
+
+// Generate Random Crystals
+for (let i = 0; i < 30; i++) {
+    createCrystal([
+        (Math.random() - 0.5) * 50,
+        Math.random() * 5,
+        (Math.random() - 0.5) * 50,
+    ]);
+}
+
+// === Shimmering Lake ===
+const lake = (() => {
+    const geometry = new THREE.PlaneGeometry(100, 100, 200, 200);
+    geometry.rotateX(-Math.PI / 2);
+
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            time: { value: 0 },
+            baseColor: { value: new THREE.Color(0x1e90ff) },
+            highlightColor: { value: new THREE.Color(0x87cefa) },
+        },
+        vertexShader: `
+            uniform float time;
+            varying vec2 vUv;
+            varying float vWave;
+
+            void main() {
+                vUv = uv;
+                vec3 pos = position;
+                vWave = sin(pos.x * 0.2 + time) * 0.3 + cos(pos.z * 0.2 + time * 1.5) * 0.3;
+                pos.y += vWave;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 baseColor;
+            uniform vec3 highlightColor;
+            varying vec2 vUv;
+            varying float vWave;
+
+            void main() {
+                float intensity = vWave * 0.5 + 0.5;
+                vec3 color = mix(baseColor, highlightColor, intensity);
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `,
+        side: THREE.DoubleSide,
+    });
+
+    return new THREE.Mesh(geometry, material);
+})();
+scene.add(lake);
+
+// === Model ===
+let centralModel = null;
+new GLTFLoader().load(
   'https://NicaCurs.github.io/ite18_Act4/metroid_primecreaturesmagmoor.glb', // Replace with actual model path
   (gltf) => {
-    const yeti = gltf.scene;
-    yeti.position.set(0, 0, 0);
-    yeti.scale.set(3, 3, 3);
-    scene.add(yeti);
-
-    mixer = new THREE.AnimationMixer(yeti);
-    gltf.animations.forEach((clip) => {
-      const action = mixer.clipAction(clip);
-      action.play();
-    });
-  },
-  undefined,
-  (error) => console.error('Error loading Yeti model:', error)
+        centralModel = gltf.scene;
+        centralModel.position.set(0, 1, 0);
+        centralModel.scale.set(80, 80, 80);
+        scene.add(centralModel);
+        console.log("Model Loaded:", gltf.scene);
+    },
+    undefined,
+    (error) => console.error("Failed to load model:", error)
 );
 
-// Medium-Sized Pointy Rocks
-const mediumRocks = [];
-const mediumRockMaterial = new THREE.MeshStandardMaterial({
-  color: 0xf5f5f5, // White for snowy effect
-  roughness: 0.8,
-  metalness: 0.2
-});
+// === Orbiting Particles ===
+const particles = (() => {
+    const particleCount = 5000;
+    const positions = new Float32Array(particleCount * 3);
+    const speeds = new Float32Array(particleCount);
 
-for (let i = 0; i < 15; i++) {
-  const x = Math.random() * 60 - 30;
-  const z = Math.random() * 60 - 30;
+    for (let i = 0; i < particleCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 10 + Math.random() * 10;
+        positions[i * 3] = Math.cos(angle) * distance; // x
+        positions[i * 3 + 1] = Math.random() * 5 - 2.5; // y
+        positions[i * 3 + 2] = Math.sin(angle) * distance; // z
+        speeds[i] = 0.001 + Math.random() * 0.002;
+    }
 
-  const mediumRock = new THREE.Mesh(
-    new THREE.ConeGeometry(Math.random() * 2 + 1, Math.random() * 6 + 3, 8),
-    mediumRockMaterial.clone()
-  );
-  mediumRock.position.set(x, 0.5, z);
-  mediumRock.castShadow = true;
-  mediumRocks.push(mediumRock);
-  scene.add(mediumRock);
-}
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("speed", new THREE.Float32BufferAttribute(speeds, 1));
 
-// White Bushes
-const bushes = [];
-const bushMaterial = new THREE.MeshStandardMaterial({
-  color: 0xffffff,
-  roughness: 0.9,
-  metalness: 0.1
-});
+    const material = new THREE.PointsMaterial({
+        color: 0x87cefa,
+        size: 0.2,
+        transparent: true,
+        opacity: 0.9,
+    });
 
-for (let i = 0; i < 20; i++) {
-  const x = Math.random() * 60 - 30;
-  const z = Math.random() * 60 - 30;
-
-  const bush = new THREE.Mesh(
-    new THREE.SphereGeometry(Math.random() * 1 + 0.5, 8, 8),
-    bushMaterial.clone()
-  );
-  bush.position.set(x, 0.25, z);
-  bush.castShadow = true;
-  bushes.push(bush);
-  scene.add(bush);
-}
-
-// Mjolnir-Style Orbiting Particles
-const particleCount = 3000;
-const particlesGeometry = new THREE.BufferGeometry();
-const positions = [];
-const particleAngles = [];
-const orbitSpeeds = [];
-const orbitRadius = 10;
-
-for (let i = 0; i < particleCount; i++) {
-  const angle = Math.random() * Math.PI * 2;
-  const height = Math.random() * 10 - 5;
-  const distance = Math.random() * orbitRadius;
-
-  positions.push(
-    Math.cos(angle) * distance,
-    height,
-    Math.sin(angle) * distance
-  );
-
-  particleAngles.push(angle);
-  orbitSpeeds.push(0.05 + Math.random() * 0.1);
-}
-
-particlesGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-particlesGeometry.setAttribute('angle', new THREE.Float32BufferAttribute(particleAngles, 1));
-particlesGeometry.setAttribute('speed', new THREE.Float32BufferAttribute(orbitSpeeds, 1));
-
-const particlesMaterial = new THREE.PointsMaterial({
-  color: 0xffffff,
-  size: 0.2,
-  transparent: true,
-  opacity: 0.9
-});
-
-const particles = new THREE.Points(particlesGeometry, particlesMaterial);
+    const points = new THREE.Points(geometry, material);
+    return points;
+})();
 scene.add(particles);
 
-// Animation Loop
+// === Animation ===
 const clock = new THREE.Clock();
 
-const animateParticles = (delta) => {
-  const positions = particlesGeometry.attributes.position.array;
-  const angles = particlesGeometry.attributes.angle.array;
-  const speeds = particlesGeometry.attributes.speed.array;
+function animate() {
+    const delta = clock.getDelta();
+    const time = clock.getElapsedTime();
 
-  for (let i = 0; i < particleCount; i++) {
-    const index = i * 3;
+    // Update lake shader
+    lake.material.uniforms.time.value = time;
 
-    angles[i] += speeds[i] * delta;
+    // Update particles
+    const particlePositions = particles.geometry.attributes.position.array;
+    const particleSpeeds = particles.geometry.attributes.speed.array;
 
-    positions[index] = Math.cos(angles[i]) * orbitRadius;
-    positions[index + 2] = Math.sin(angles[i]) * orbitRadius;
-  }
+    for (let i = 0; i < particlePositions.length / 3; i++) {
+        const angle = Math.atan2(particlePositions[i * 3 + 2], particlePositions[i * 3]);
+        const distance = Math.sqrt(
+            particlePositions[i * 3] ** 2 + particlePositions[i * 3 + 2] ** 2
+        );
 
-  particlesGeometry.attributes.position.needsUpdate = true;
-  particlesGeometry.attributes.angle.needsUpdate = true;
-};
+        const speed = particleSpeeds[i];
+        const newAngle = angle + speed;
 
-const animate = () => {
-  const delta = clock.getDelta();
-  if (mixer) mixer.update(delta);
-  animateParticles(delta);
+        particlePositions[i * 3] = Math.cos(newAngle) * distance;
+        particlePositions[i * 3 + 2] = Math.sin(newAngle) * distance;
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
 
-  controls.update();
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-};
+    // Update moving light
+    movingLight.position.set(
+        10 * Math.sin(time * 0.5),
+        10,
+        10 * Math.cos(time * 0.5)
+    );
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+}
 
 animate();
 
-// Handle Window Resize
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+// === Responsive Resizing ===
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
