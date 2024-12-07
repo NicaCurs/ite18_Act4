@@ -42,7 +42,7 @@ scene.add(spotlight);
 const loader = new GLTFLoader();
 let mixer;
 loader.load(
-  'https://NicaCurs.github.io/ite18_Act4/lowpoly_bigfoot.glb', // Replace with actual model path
+  'https://NicaCurs.github.io/ite18_Act4/metroid_primecreaturesmagmoor.glb', // Replace with actual model path
   (gltf) => {
     const yeti = gltf.scene;
     yeti.position.set(0, 0, 0);
