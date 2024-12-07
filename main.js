@@ -97,7 +97,7 @@ scene.add(lake);
 // === Model ===
 let centralModel = null;
 new GLTFLoader().load(
-  'https://NicaCurs.github.io/ite18_Act4/metroid_primecreaturesmagmoor.glb', // Replace with actual model path
+  'https://NicaCurs.github.io/ite18_Act4/blue_trivalve.glb', 
   (gltf) => {
         centralModel = gltf.scene;
         centralModel.position.set(0, 1, 0);
